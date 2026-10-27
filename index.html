@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Punch Demo — Daily Report Review (Illustrative)</title>
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;margin:0;background:#f6f7f9;color:#17202a}
+header{background:#111827;color:#fff;padding:20px 24px}header h1{margin:0;font-size:22px}header p{margin:6px 0 0;color:#cbd5e1}
+main{max-width:1080px;margin:0 auto;padding:20px}.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin-bottom:16px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.stat b{font-size:24px;display:block}.muted{color:#64748b;font-size:13px}
+input,select,button{padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px}button{background:#111827;color:#fff;cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:10px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:top}
+.flag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}.photo{background:#fee2e2;color:#991b1b}.code{background:#fef3c7;color:#92400e}.vague{background:#e0e7ff;color:#3730a3}.delay{background:#ffedd5;color:#9a3412}.ok{background:#dcfce7;color:#166534}
+.skel{height:16px;background:#e5e7eb;border-radius:6px;margin:8px 0;animation:pulse 1.2s infinite}@keyframes pulse{50%{opacity:.5}}
+footer{color:#64748b;font-size:13px;text-align:center;padding:20px}
+@media(max-width:700px){.stats{grid-template-columns:1fr 1fr}table{font-size:13px}}
+</style>
+</head>
+<body>
+<header>
+<h1>Daily Report Review</h1>
+<p>Illustrative office view — field daily reports checked before they become payroll, purchase orders and the project record.</p>
+</header>
+<main>
+<div id="loading" class="card"><div class="skel"></div><div class="skel"></div><p class="muted">Loading reports…</p></div>
+<div id="app" style="display:none">
+<div class="card stats">
+<div class="stat"><b id="sTotal">–</b><span class="muted">Reports</span></div>
+<div class="stat"><b id="sFlag">–</b><span class="muted">Flagged</span></div>
+<div class="stat"><b id="sHours">–</b><span class="muted">Crew hours in flagged reports</span></div>
+<div class="stat"><b id="sDone">–</b><span class="muted">Resolved</span></div>
+</div>
+<div class="card">
+<h3 style="margin-top:0">Office review checklist</h3>
+<ol id="checklist">
+<li><label><input type="checkbox"> Every report has at least one site photo</label></li>
+<li><label><input type="checkbox"> Every labour entry carries a cost code</label></li>
+<li><label><input type="checkbox"> Vague voice updates clarified with the foreman</label></li>
+<li><label><input type="checkbox"> Delays flagged as a follow-up task, not left in notes</label></li>
+<li><label><input type="checkbox"> Flagged reports resolved before payroll / purchase orders</label></li>
+</ol>
+<p class="muted" id="progress">0 of 5 steps done</p>
+</div>
+<div class="card">
+<div class="toolbar">
+<input id="q" placeholder="Search project, foreman or note" style="flex:1;min-width:200px">
+<select id="proj"><option value="">All projects</option><option>Summit Drywall — Block A</option><option>Riverside Retail Fit-out</option><option>Northside Apartments</option></select>
+<select id="flagf"><option value="">All flags</option><option value="photo">Missing photo</option><option value="code">Missing cost code</option><option value="vague">Vague update</option><option value="delay">Delay not flagged</option><option value="ok">OK</option></select>
+<label><input type="checkbox" id="flagOnly"> Flagged only</label>
+<select id="role"><option value="office">Role: Office (can resolve)</option><option value="field">Role: Field (view only)</option></select>
+<button id="failBtn">Simulate API failure</button>
+</div>
+<div id="err" class="card" style="display:none;margin-top:12px"><b>Could not load reports.</b> <button id="retry">Retry</button></div>
+<table><thead><tr><th>Date</th><th>Project</th><th>Foreman</th><th>Crew hrs</th><th>Photos</th><th>Flag</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+<p class="muted" id="pageInfo"></p>
+<div><button id="prev">Previous</button> <button id="next">Next</button></div>
+</div>
+<div id="detail" class="card" style="display:none"></div>
+</div>
+</main>
+<footer>Demo data only — no real voice notes, photos, payroll or accounting data are processed. No integration with Punch, QuickBooks, Sage or any estimating system. This is an illustrative review workflow, not Punch's product.</footer>
+<script>
+const DATA=[
+{id:"R-01",date:"2026-10-20",project:"Summit Drywall — Block A",foreman:"D. Gibbs",hrs:42,photos:6,flag:"ok",note:"Drywall hung on levels 2–3; inspection booked.",rule:"No flag: photo, cost code and update all present."},
+{id:"R-02",date:"2026-10-20",project:"Riverside Retail Fit-out",foreman:"M. Ortiz",hrs:28,photos:0,flag:"photo",note:"Framing complete.",rule:"Missing photo: a daily report with 0 site photos cannot be verified against the work claimed."},
+{id:"R-03",date:"2026-10-21",project:"Northside Apartments",foreman:"S. Patel",hrs:36,photos:4,flag:"code",note:"Crew on site, concrete pour delayed by rain.",rule:"Missing cost code: labour hours without a cost code cannot be posted cleanly to payroll or job costing."},
+{id:"R-04",date:"2026-10-21",project:"Summit Drywall — Block A",foreman:"D. Gibbs",hrs:40,photos:5,flag:"vague",note:"Work done.",rule:"Vague update: 'Work done' names no area, trade or quantity, so the office cannot tell what moved."},
+{id:"R-05",date:"2026-10-22",project:"Riverside Retail Fit-out",foreman:"M. Ortiz",hrs:24,photos:3,flag:"delay",note:"Material delivery late, crew waited 3 hours.",rule:"Delay not flagged: a 3-hour wait is recorded only in notes — no follow-up task was created."},
+{id:"R-06",date:"2026-10-22",project:"Northside Apartments",foreman:"S. Patel",hrs:32,photos:7,flag:"ok",note:"Pour completed, curing; photos of each bay attached.",rule:"No flag: photo, cost code and update all present."},
+{id:"R-07",date:"2026-10-23",project:"Summit Drywall — Block A",foreman:"D. Gibbs",hrs:38,photos:0,flag:"photo",note:"Taping finished on level 2.",rule:"Missing photo: a daily report with 0 site photos cannot be verified against the work claimed."},
+{id:"R-08",date:"2026-10-23",project:"Riverside Retail Fit-out",foreman:"M. Ortiz",hrs:30,photos:2,flag:"code",note:"Electrical rough-in started.",rule:"Missing cost code: labour hours without a cost code cannot be posted cleanly to payroll or job costing."},
+{id:"R-09",date:"2026-10-24",project:"Northside Apartments",foreman:"S. Patel",hrs:44,photos:5,flag:"ok",note:"Steel delivery received and checked against order.",rule:"No flag: photo, cost code and update all present."},
+{id:"R-10",date:"2026-10-24",project:"Summit Drywall — Block A",foreman:"D. Gibbs",hrs:26,photos:1,flag:"vague",note:"Good progress today.",rule:"Vague update: 'Good progress' names no area, trade or quantity, so the office cannot tell what moved."},
+{id:"R-11",date:"2026-10-25",project:"Riverside Retail Fit-out",foreman:"M. Ortiz",hrs:34,photos:4,flag:"delay",note:"Inspector did not arrive; rebook needed.",rule:"Delay not flagged: a missed inspection is recorded only in notes — no follow-up task was created."},
+{id:"R-12",date:"2026-10-25",project:"Northside Apartments",foreman:"S. Patel",hrs:40,photos:6,flag:"ok",note:"Scaffolding inspected, work resumed on block B.",rule:"No flag: photo, cost code and update all present."},
+{id:"R-13",date:"2026-10-26",project:"Summit Drywall — Block A",foreman:"D. Gibbs",hrs:36,photos:3,flag:"code",note:"Second crew added for level 3.",rule:"Missing cost code: labour hours without a cost code cannot be posted cleanly to payroll or job costing."},
+{id:"R-14",date:"2026-10-26",project:"Riverside Retail Fit-out",foreman:"M. Ortiz",hrs:22,photos:0,flag:"photo",note:"Demolition done.",rule:"Missing photo: a daily report with 0 site photos cannot be verified against the work claimed."},
+{id:"R-15",date:"2026-10-26",project:"Northside Apartments",foreman:"S. Patel",hrs:38,photos:5,flag:"ok",note:"Roof membrane 60% complete, photos attached.",rule:"No flag: photo, cost code and update all present."},
+{id:"R-16",date:"2026-10-26",project:"Summit Drywall — Block A",foreman:"D. Gibbs",hrs:30,photos:2,flag:"vague",note:"Stuff finished.",rule:"Vague update: 'Stuff finished' names no area, trade or quantity, so the office cannot tell what moved."}
+];
+let state={q:"",proj:"",flag:"",only:false,page:0,resolved:new Set(),reviewed:new Set()};
+const labels={photo:"Missing photo",code:"Missing cost code",vague:"Vague update",delay:"Delay not flagged",ok:"OK"};
+function filtered(){return DATA.filter(r=>{if(state.q&&!(r.project+" "+r.foreman+" "+r.note).toLowerCase().includes(state.q.toLowerCase()))return false;if(state.proj&&r.project!==state.proj)return false;if(state.flag&&r.flag!==state.flag)return false;if(state.only&&r.flag==="ok")return false;return true;});}
+function render(){const list=filtered();const per=8;const pages=Math.max(1,Math.ceil(list.length/per));if(state.page>=pages)state.page=0;const slice=list.slice(state.page*per,state.page*per+per);
+const flagged=DATA.filter(r=>r.flag!=="ok"&&!state.resolved.has(r.id));
+document.getElementById("sTotal").textContent=DATA.length;
+document.getElementById("sFlag").textContent=flagged.length;
+document.getElementById("sHours").textContent=flagged.reduce((a,r)=>a+r.hrs,0);
+document.getElementById("sDone").textContent=state.resolved.size;
+document.getElementById("rows").innerHTML=slice.length?slice.map(r=>`<tr><td>${r.date}</td><td>${r.project}</td><td>${r.foreman}</td><td>${r.hrs}</td><td>${r.photos}</td><td><span class="flag ${r.flag}">${state.resolved.has(r.id)?"Resolved":labels[r.flag]}</span></td><td><button data-id="${r.id}">Review</button></td></tr>`).join(""):`<tr><td colspan="7">No reports match — try clearing the search or filters.</td></tr>`;
+document.getElementById("pageInfo").textContent=`Page ${state.page+1} of ${pages} · ${list.length} reports`;
+document.getElementById("prev").disabled=state.page===0;document.getElementById("next").disabled=state.page>=pages-1;
+document.querySelectorAll("[data-id]").forEach(b=>b.onclick=()=>show(b.dataset.id));}
+function show(id){const r=DATA.find(x=>x.id===id);const can=document.getElementById("role").value==="office";
+document.getElementById("detail").style.display="block";
+document.getElementById("detail").innerHTML=`<h3 style="margin-top:0">${r.id} — ${r.project}</h3><p><b>${r.date} · ${r.foreman} · ${r.hrs} crew hours · ${r.photos} photos</b></p><p>${r.note}</p><p><b>Flag rule:</b> ${r.rule}</p><p><label>Office note<br><textarea id="note" rows="2" style="width:100%"></textarea></label></p><p><button id="rev" ${state.reviewed.has(id)?"disabled":""}>Mark reviewed</button> <button id="res" ${!can||state.resolved.has(id)?"disabled":""}>Mark resolved</button></p>${!can?"<p class='muted'>Field role is view-only — switch to Office to resolve.</p>":""}`;
+document.getElementById("rev").onclick=()=>{state.reviewed.add(id);show(id);};
+document.getElementById("res").onclick=()=>{state.resolved.add(id);render();show(id);};}
+// Use a single definition of the resolve handler (kept simple for a single-file demo).
+document.getElementById("q").oninput=e=>{state.q=e.target.value;state.page=0;render();};
+document.getElementById("proj").onchange=e=>{state.proj=e.target.value;state.page=0;render();};
+document.getElementById("flagf").onchange=e=>{state.flag=e.target.value;state.page=0;render();};
+document.getElementById("flagOnly").onchange=e=>{state.only=e.target.checked;state.page=0;render();};
+document.getElementById("role").onchange=render;
+document.getElementById("prev").onclick=()=>{state.page--;render();};
+document.getElementById("next").onclick=()=>{state.page++;render();};
+document.getElementById("checklist").onchange=()=>{const n=document.querySelectorAll("#checklist input:checked").length;document.getElementById("progress").textContent=`${n} of 5 steps done`;};
+document.getElementById("failBtn").onclick=()=>{document.getElementById("err").style.display="block";};
+document.getElementById("retry").onclick=()=>{document.getElementById("err").style.display="none";render();};
+setTimeout(()=>{document.getElementById("loading").style.display="none";document.getElementById("app").style.display="block";render();},1200);
+</script>
+</body>
+</html>
